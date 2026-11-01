@@ -1,34 +1,25 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="Chatbot Informasi Akademik SMK",
-    page_icon="🎓"
+    page_title="Chatbot Akademik SMK",
+    page_icon="🎓",
+    layout="wide"
 )
 
-st.title("🎓 Chatbot Informasi Akademik SMK")
-st.write("Selamat datang! Silakan masukkan nama kamu.")
+st.title("🎓 CHATBOT INFORMASI AKADEMIK SMK")
+st.subheader("Selamat Datang di Layanan Informasi Akademik")
 
-nama = st.text_input("Nama siswa")
+nama = st.text_input("Masukkan nama siswa")
 
 if st.button("Mulai"):
     if nama.strip():
-        st.success(f"Halo, {nama}! Selamat datang di Chatbot Akademik SMK.")
+        st.success(f"Selamat datang, {nama}!")
 
-        pertanyaan = st.selectbox(
-            "Informasi apa yang ingin kamu lihat?",
-            [
-                "Pilih informasi",
-                "Jadwal pelajaran",
-                "Nilai siswa",
-                "Absensi siswa",
-                "Kegiatan sekolah"
-            ]
+        menu = st.selectbox(
+            "Pilih informasi akademik",
+            ["Jadwal Pelajaran", "Nilai Siswa", "Absensi", "Kegiatan Sekolah"]
         )
 
-        if pertanyaan != "Pilih informasi":
-            st.info(
-                f"Kamu memilih informasi: {pertanyaan}. "
-                "Data akademik perlu dihubungkan ke database agar dapat ditampilkan."
-            )
+        st.info(f"Kamu memilih menu: {menu}")
     else:
-        st.warning("Silakan masukkan nama terlebih dahulu.")
+        st.warning("Masukkan nama terlebih dahulu.")
