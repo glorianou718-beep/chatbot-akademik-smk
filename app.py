@@ -1,74 +1,87 @@
+
 import streamlit as st
 import Database
 
+# Konfigurasi halaman
 st.set_page_config(
     page_title="Chatbot Informasi Akademik SMK",
     page_icon="🎓",
-    layout="centered"
+    layout="wide"
 )
 
-# Menyiapkan database
+# Membuat database dan mengisi data contoh
 Database.buat_database()
 Database.isi_data()
 
-st.title("🎓 CHATBOT INFORMASI AKADEMIK SMK")
-st.subheader("Selamat Datang di Layanan Informasi Akademik")
-st.write("Silakan masukkan nama untuk melihat informasi akademik.")
 
-# Memasukkan nama siswa
-nama = st.text_input("Masukkan nama siswa")
-
-if st.button("Mulai"):
+# Mengambil data siswa
+def cari_siswa(nis):
     conn = Database.koneksi_database()
     cursor = conn.cursor()
 
     cursor.execute(
-        """
-        SELECT id_siswa, nama, nis, kelas
-        FROM siswa
-        WHERE LOWER(nama) = LOWER(?)
-        """,
-        (nama.strip(),)
+        "SELECT * FROM siswa WHERE nis = ?",
+        (nis,)
     )
 
     siswa = cursor.fetchone()
     conn.close()
+    return siswa
 
-    if siswa:
-        st.session_state["siswa_id"] = siswa["id_siswa"]
-        st.session_state["nama"] = siswa["nama"]
-        st.session_state["kelas"] = siswa["kelas"]
+
+# Tampilan utama
+st.title("🎓 Chatbot Informasi Akademik SMK")
+st.write("Selamat datang di layanan informasi akademik sekolah.")
+st.divider()
+
+# Sidebar
+st.sidebar.title("📚 Menu Akademik")
+menu = st.sidebar.radio(
+    "Pilih informasi:",
+    [
+        "Beranda",
+        "Jadwal Pelajaran",
+        "Nilai Akademik",
+        "Absensi",
+        "Kegiatan Sekolah"
+    ]
+)
+
+# Login siswa
+st.subheader("👩‍🎓 Identitas Siswa")
+nis = st.text_input("Masukkan NIS siswa", placeholder="Contoh: 12345")
+
+if nis:
+    siswa = cari_siswa(nis)
+
+    if siswa is None:
+        st.error("Data siswa tidak ditemukan. Periksa kembali NIS.")
     else:
-        st.error("Data siswa tidak ditemukan.")
+        st.success(f"Selamat datang, {siswa['nama']}!")
+        st.info(f"Kelas: {siswa['kelas']}")
 
-# Menampilkan informasi siswa
-if "siswa_id" in st.session_state:
-    st.success(f"Selamat datang, {st.session_state['nama']}!")
-    st.write(f"**Nama:** {st.session_state['nama']}")
-    st.write(f"**Kelas:** {st.session_state['kelas']}")
+        id_siswa = siswa["id_siswa"]
 
-    menu = st.selectbox(
-        "Pilih informasi akademik",
-        [
-            "Pilih Menu",
-            "Jadwal Pelajaran",
-            "Nilai Akademik",
-            "Absensi",
-            "Kegiatan Sekolah"
-        ]
-    )
+        if menu == "Beranda":
+            st.subheader("🏫 Beranda Akademik")
+            st.write(
+                "Silakan pilih menu di sebelah kiri "
+                "untuk melihat informasi akademik."
+            )
 
-    conn = Database.koneksi_database()
-    cursor = conn.cursor()
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Nama Siswa", siswa["nama"])
+            col2.metric("NIS", siswa["nis"])
+            col3.metric("Kelas", siswa["kelas"])
 
-    if menu == "Jadwal Pelajaran":
-        st.subheader("📚 Jadwal Pelajaran")
+        elif menu == "Jadwal Pelajaran":
+            st.subheader("📅 Jadwal Pelajaran")
 
-        cursor.execute("""
-            SELECT hari, jam, mata_pelajaran, guru
-            FROM jadwal
-            WHERE kelas = ?
-            ORDER BY
+            conn = Database.koneksi_database()
+            data = conn.execute("""
+                SELECT hari, jam, mata_pelajaran, guru, kelas
+                FROM jadwal
+                ORDER BY
                 CASE hari
                     WHEN 'Senin' THEN 1
                     WHEN 'Selasa' THEN 2
@@ -77,80 +90,93 @@ if "siswa_id" in st.session_state:
                     WHEN 'Jumat' THEN 5
                     WHEN 'Sabtu' THEN 6
                     ELSE 7
-                END
-        """, (st.session_state["kelas"],))
+                END, jam
+            """).fetchall()
+            conn.close()
 
-        data = cursor.fetchall()
+            if data:
+                st.table([dict(row) for row in data])
+            else:
+                st.warning("Jadwal belum tersedia.")
 
-        if data:
-            st.table([dict(row) for row in data])
-        else:
-            st.info("Jadwal belum tersedia.")
+        elif menu == "Nilai Akademik":
+            st.subheader("📝 Nilai Akademik")
 
-    elif menu == "Nilai Akademik":
-        st.subheader("📝 Nilai Akademik")
+            conn = Database.koneksi_database()
+            data = conn.execute("""
+                SELECT mata_pelajaran, nilai
+                FROM nilai
+                WHERE id_siswa = ?
+            """, (id_siswa,)).fetchall()
+            conn.close()
 
-        cursor.execute("""
-            SELECT mata_pelajaran, nilai
-            FROM nilai
-            WHERE id_siswa = ?
-        """, (st.session_state["siswa_id"],))
+            if data:
+                st.table([dict(row) for row in data])
 
-        data = cursor.fetchall()
+                rata_rata = sum(row["nilai"] for row in data) / len(data)
+                st.metric("Rata-rata Nilai", f"{rata_rata:.2f}")
+            else:
+                st.warning("Nilai belum tersedia.")
 
-        if data:
-            st.table([dict(row) for row in data])
-            rata_rata = sum(row["nilai"] for row in data) / len(data)
-            st.metric("Rata-rata Nilai", f"{rata_rata:.2f}")
-        else:
-            st.info("Nilai belum tersedia.")
+        elif menu == "Absensi":
+            st.subheader("📋 Informasi Absensi")
 
-    elif menu == "Absensi":
-        st.subheader("📋 Rekap Absensi")
+            conn = Database.koneksi_database()
+            data = conn.execute("""
+                SELECT status, COUNT(*) AS jumlah
+                FROM absensi
+                WHERE id_siswa = ?
+                GROUP BY status
+            """, (id_siswa,)).fetchall()
+            conn.close()
 
-        cursor.execute("""
-            SELECT status, COUNT(*) AS jumlah
-            FROM absensi
-            WHERE id_siswa = ?
-            GROUP BY status
-        """, (st.session_state["siswa_id"],))
+            jumlah_absensi = {
+                "Hadir": 0,
+                "Izin": 0,
+                "Sakit": 0,
+                "Alpa": 0
+            }
 
-        data = cursor.fetchall()
-        rekap = {row["status"]: row["jumlah"] for row in data}
+            for row in data:
+                jumlah_absensi[row["status"]] = row["jumlah"]
 
-        hadir = rekap.get("Hadir", 0)
-        izin = rekap.get("Izin", 0)
-        sakit = rekap.get("Sakit", 0)
-        alpa = rekap.get("Alpa", 0)
+            total = sum(jumlah_absensi.values())
+            persentase = (
+                jumlah_absensi["Hadir"] / total * 100
+                if total > 0 else 0
+            )
 
-        total = hadir + izin + sakit + alpa
-        persentase = (hadir / total * 100) if total > 0 else 0
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Hadir", jumlah_absensi["Hadir"])
+            col2.metric("Izin", jumlah_absensi["Izin"])
+            col3.metric("Sakit", jumlah_absensi["Sakit"])
+            col4.metric("Alpa", jumlah_absensi["Alpa"])
 
-        st.write(f"**Hadir:** {hadir}")
-        st.write(f"**Izin:** {izin}")
-        st.write(f"**Sakit:** {sakit}")
-        st.write(f"**Alpa:** {alpa}")
-        st.metric("Persentase Kehadiran", f"{persentase:.1f}%")
+            st.metric("Persentase Kehadiran", f"{persentase:.1f}%")
 
-    elif menu == "Kegiatan Sekolah":
-        st.subheader("🏫 Kegiatan Sekolah")
+        elif menu == "Kegiatan Sekolah":
+            st.subheader("🎉 Kegiatan Sekolah")
 
-        cursor.execute("""
-            SELECT nama_kegiatan, tanggal, tempat, keterangan
-            FROM kegiatan
-            ORDER BY tanggal
-        """)
+            conn = Database.koneksi_database()
+            data = conn.execute("""
+                SELECT nama_kegiatan, tanggal, tempat, keterangan
+                FROM kegiatan
+                ORDER BY tanggal
+            """).fetchall()
+            conn.close()
 
-        data = cursor.fetchall()
+            if data:
+                for kegiatan in data:
+                    with st.container(border=True):
+                        st.markdown(f"### {kegiatan['nama_kegiatan']}")
+                        st.write("📅 Tanggal:", kegiatan["tanggal"])
+                        st.write("📍 Tempat:", kegiatan["tempat"])
+                        st.write("ℹ️ Keterangan:", kegiatan["keterangan"])
+            else:
+                st.warning("Belum ada kegiatan sekolah.")
 
-        if data:
-            for kegiatan in data:
-                st.markdown(f"### {kegiatan['nama_kegiatan']}")
-                st.write(f"📅 Tanggal: {kegiatan['tanggal']}")
-                st.write(f"📍 Tempat: {kegiatan['tempat']}")
-                st.write(f"Keterangan: {kegiatan['keterangan']}")
-                st.divider()
-        else:
-            st.info("Belum ada kegiatan sekolah.")
+else:
+    st.info("Masukkan NIS terlebih dahulu untuk melihat informasi akademik.")
 
-    conn.close()
+st.divider()
+st.caption("Chatbot Informasi Akademik SMK | Berbasis Python dan SQLite")

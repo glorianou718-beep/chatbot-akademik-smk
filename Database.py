@@ -1,156 +1,154 @@
-import streamlit as st
-import Database
 
-st.set_page_config(
-    page_title="Chatbot Informasi Akademik SMK",
-    page_icon="🎓",
-    layout="centered"
-)
+import sqlite3
+from pathlib import Path
 
-# Menyiapkan database
-Database.buat_database()
-Database.isi_data()
+DATABASE = Path(__file__).parent / "akademik.db"
 
-st.title("🎓 CHATBOT INFORMASI AKADEMIK SMK")
-st.subheader("Selamat Datang di Layanan Informasi Akademik")
-st.write("Silakan masukkan nama untuk melihat informasi akademik.")
 
-# Memasukkan nama siswa
-nama = st.text_input("Masukkan nama siswa")
+def koneksi_database():
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-if st.button("Mulai"):
-    conn = Database.koneksi_database()
+
+def buat_database():
+    conn = koneksi_database()
     cursor = conn.cursor()
 
-    cursor.execute(
-        """
-        SELECT id_siswa, nama, nis, kelas
-        FROM siswa
-        WHERE LOWER(nama) = LOWER(?)
-        """,
-        (nama.strip(),)
-    )
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS siswa (
+            id_siswa INTEGER PRIMARY KEY AUTOINCREMENT,
+            nis TEXT UNIQUE,
+            nama TEXT,
+            kelas TEXT
+        )
+    """)
 
-    siswa = cursor.fetchone()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS jadwal (
+            id_jadwal INTEGER PRIMARY KEY AUTOINCREMENT,
+            hari TEXT,
+            jam TEXT,
+            mata_pelajaran TEXT,
+            guru TEXT,
+            kelas TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS nilai (
+            id_nilai INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_siswa INTEGER,
+            mata_pelajaran TEXT,
+            nilai REAL,
+            FOREIGN KEY (id_siswa) REFERENCES siswa(id_siswa)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS absensi (
+            id_absensi INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_siswa INTEGER,
+            tanggal TEXT,
+            status TEXT,
+            FOREIGN KEY (id_siswa) REFERENCES siswa(id_siswa)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS kegiatan (
+            id_kegiatan INTEGER PRIMARY KEY AUTOINCREMENT,
+            nama_kegiatan TEXT,
+            tanggal TEXT,
+            tempat TEXT,
+            keterangan TEXT
+        )
+    """)
+
+    conn.commit()
     conn.close()
 
-    if siswa:
-        st.session_state["siswa_id"] = siswa["id_siswa"]
-        st.session_state["nama"] = siswa["nama"]
-        st.session_state["kelas"] = siswa["kelas"]
-    else:
-        st.error("Data siswa tidak ditemukan.")
 
-# Menampilkan informasi siswa
-if "siswa_id" in st.session_state:
-    st.success(f"Selamat datang, {st.session_state['nama']}!")
-    st.write(f"**Nama:** {st.session_state['nama']}")
-    st.write(f"**Kelas:** {st.session_state['kelas']}")
+def isi_data():
+    conn = koneksi_database()
+    cursor = conn.cursor()
 
-    menu = st.selectbox(
-        "Pilih informasi akademik",
-        [
-            "Pilih Menu",
-            "Jadwal Pelajaran",
-            "Nilai Akademik",
-            "Absensi",
-            "Kegiatan Sekolah"
+    cursor.execute("""
+        INSERT OR IGNORE INTO siswa (nis, nama, kelas)
+        VALUES (?, ?, ?)
+    """, ("12345", "Gloria", "XI RPL"))
+
+    siswa = cursor.execute("""
+        SELECT id_siswa FROM siswa WHERE nis = ?
+    """, ("12345",)).fetchone()
+
+    id_siswa = siswa["id_siswa"]
+
+    if cursor.execute("SELECT COUNT(*) FROM jadwal").fetchone()[0] == 0:
+        jadwal = [
+            ("Senin", "07.00 - 08.30", "Pemrograman Python", "Bapak Andi", "XI RPL"),
+            ("Senin", "08.30 - 10.00", "Basis Data", "Ibu Sinta", "XI RPL"),
+            ("Senin", "10.30 - 12.00", "Sistem Informasi", "Bapak Rudi", "XI RPL"),
+            ("Selasa", "07.00 - 08.30", "Bahasa Indonesia", "Ibu Maria", "XI RPL"),
+            ("Selasa", "08.30 - 10.00", "Matematika", "Bapak Yanto", "XI RPL"),
+            ("Selasa", "10.30 - 12.00", "Jaringan Komputer", "Bapak Anton", "XI RPL")
         ]
-    )
 
-    conn = Database.koneksi_database()
-    cursor = conn.cursor()
+        cursor.executemany("""
+            INSERT INTO jadwal
+            (hari, jam, mata_pelajaran, guru, kelas)
+            VALUES (?, ?, ?, ?, ?)
+        """, jadwal)
 
-    if menu == "Jadwal Pelajaran":
-        st.subheader("📚 Jadwal Pelajaran")
+    if cursor.execute("SELECT COUNT(*) FROM nilai").fetchone()[0] == 0:
+        nilai = [
+            (id_siswa, "Pemrograman Python", 85),
+            (id_siswa, "Basis Data", 88),
+            (id_siswa, "Sistem Informasi", 90),
+            (id_siswa, "Jaringan Komputer", 87)
+        ]
 
-        cursor.execute("""
-            SELECT hari, jam, mata_pelajaran, guru
-            FROM jadwal
-            WHERE kelas = ?
-            ORDER BY
-                CASE hari
-                    WHEN 'Senin' THEN 1
-                    WHEN 'Selasa' THEN 2
-                    WHEN 'Rabu' THEN 3
-                    WHEN 'Kamis' THEN 4
-                    WHEN 'Jumat' THEN 5
-                    WHEN 'Sabtu' THEN 6
-                    ELSE 7
-                END
-        """, (st.session_state["kelas"],))
+        cursor.executemany("""
+            INSERT INTO nilai (id_siswa, mata_pelajaran, nilai)
+            VALUES (?, ?, ?)
+        """, nilai)
 
-        data = cursor.fetchall()
+    if cursor.execute("SELECT COUNT(*) FROM absensi").fetchone()[0] == 0:
+        absensi = [
+            (id_siswa, "2026-10-01", "Hadir"),
+            (id_siswa, "2026-10-02", "Hadir"),
+            (id_siswa, "2026-10-03", "Hadir"),
+            (id_siswa, "2026-10-04", "Izin"),
+            (id_siswa, "2026-10-05", "Sakit")
+        ]
 
-        if data:
-            st.table([dict(row) for row in data])
-        else:
-            st.info("Jadwal belum tersedia.")
+        cursor.executemany("""
+            INSERT INTO absensi (id_siswa, tanggal, status)
+            VALUES (?, ?, ?)
+        """, absensi)
 
-    elif menu == "Nilai Akademik":
-        st.subheader("📝 Nilai Akademik")
+    if cursor.execute("SELECT COUNT(*) FROM kegiatan").fetchone()[0] == 0:
+        kegiatan = [
+            ("Upacara Bendera", "2026-10-05", "Lapangan Sekolah",
+             "Upacara rutin hari Senin"),
+            ("Ujian Tengah Semester", "2026-10-10", "Ruang Kelas",
+             "Ujian Tengah Semester"),
+            ("Kegiatan Olahraga", "2026-10-15", "Lapangan Sekolah",
+             "Kegiatan olahraga siswa")
+        ]
 
-        cursor.execute("""
-            SELECT mata_pelajaran, nilai
-            FROM nilai
-            WHERE id_siswa = ?
-        """, (st.session_state["siswa_id"],))
+        cursor.executemany("""
+            INSERT INTO kegiatan
+            (nama_kegiatan, tanggal, tempat, keterangan)
+            VALUES (?, ?, ?, ?)
+        """, kegiatan)
 
-        data = cursor.fetchall()
-
-        if data:
-            st.table([dict(row) for row in data])
-            rata_rata = sum(row["nilai"] for row in data) / len(data)
-            st.metric("Rata-rata Nilai", f"{rata_rata:.2f}")
-        else:
-            st.info("Nilai belum tersedia.")
-
-    elif menu == "Absensi":
-        st.subheader("📋 Rekap Absensi")
-
-        cursor.execute("""
-            SELECT status, COUNT(*) AS jumlah
-            FROM absensi
-            WHERE id_siswa = ?
-            GROUP BY status
-        """, (st.session_state["siswa_id"],))
-
-        data = cursor.fetchall()
-        rekap = {row["status"]: row["jumlah"] for row in data}
-
-        hadir = rekap.get("Hadir", 0)
-        izin = rekap.get("Izin", 0)
-        sakit = rekap.get("Sakit", 0)
-        alpa = rekap.get("Alpa", 0)
-
-        total = hadir + izin + sakit + alpa
-        persentase = (hadir / total * 100) if total > 0 else 0
-
-        st.write(f"**Hadir:** {hadir}")
-        st.write(f"**Izin:** {izin}")
-        st.write(f"**Sakit:** {sakit}")
-        st.write(f"**Alpa:** {alpa}")
-        st.metric("Persentase Kehadiran", f"{persentase:.1f}%")
-
-    elif menu == "Kegiatan Sekolah":
-        st.subheader("🏫 Kegiatan Sekolah")
-
-        cursor.execute("""
-            SELECT nama_kegiatan, tanggal, tempat, keterangan
-            FROM kegiatan
-            ORDER BY tanggal
-        """)
-
-        data = cursor.fetchall()
-
-        if data:
-            for kegiatan in data:
-                st.markdown(f"### {kegiatan['nama_kegiatan']}")
-                st.write(f"📅 Tanggal: {kegiatan['tanggal']}")
-                st.write(f"📍 Tempat: {kegiatan['tempat']}")
-                st.write(f"Keterangan: {kegiatan['keterangan']}")
-                st.divider()
-        else:
-            st.info("Belum ada kegiatan sekolah.")
-
+    conn.commit()
     conn.close()
+
+
+if __name__ == "__main__":
+    buat_database()
+    isi_data()
+    print("Database berhasil dibuat!")
+    print("Data contoh berhasil dimasukkan!")
